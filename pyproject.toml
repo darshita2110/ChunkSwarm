@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chunkswarm"
+version = "0.1.0"
+description = "Hybrid P2P file sharing over raw TCP: framed binary protocol, SHA-256 verified chunked transfer, multi-peer failover"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Darshita Bansal" }]
+dependencies = ["flask>=3.0", "requests>=2.31"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+chunkswarm-tracker = "chunkswarm.tracker:main"
+chunkswarm-peer = "chunkswarm.peer:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# runtime data: never commit databases, logs, secrets or user files
+data/
+logs/
+*.db
+*.db-wal
+*.db-shm
+.env
+downloads/
+shared_files/
+*.part
+*.egg-info/
