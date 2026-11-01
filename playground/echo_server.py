@@ -12,7 +12,8 @@ PORT = 5000          # the "door number" clients knock on
 # 1. Create a TCP socket.  AF_INET = IPv4,  SOCK_STREAM = TCP
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# 2. Allow restarting the server immediately on the same port.
+# 2. Allow re
+# \starting the server immediately on the same port.
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 # 3. Claim the address + port, then start listening for clients.
