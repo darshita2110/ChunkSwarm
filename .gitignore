@@ -13,3 +13,4 @@ downloads/
 shared_files/
 *.part
 *.egg-info/
+playground/shared
