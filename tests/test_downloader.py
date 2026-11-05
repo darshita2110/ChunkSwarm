@@ -4,7 +4,6 @@ import hashlib
 import os
 import socket
 import threading
-
 import pytest
 
 from chunkswarm.downloader import DownloadError, IntegrityError, Source, download
@@ -15,12 +14,11 @@ CS = MIN_CHUNK_SIZE  # 64 KiB chunks keep the tests fast
 
 
 class CorruptingServer(PeerServer):
-    """An EVIL peer: flips one bit in chunk 1."""
+    """An EVIL peer: every chunk it sends has one flipped bit."""
 
     def _read_chunk(self, path, manifest, index):
         data = bytearray(super()._read_chunk(path, manifest, index))
-        if index == 1:
-            data[0] ^= 0x01
+        data[0] ^= 0x01
         return bytes(data)
 
 
@@ -127,8 +125,7 @@ def test_evil_peer_caught_and_chunk_fetched_from_honest_peer(tmp_path, data, ser
     res = download(m, [src(evil), src(good)], tmp_path / "dl")
     assert res.path.read_bytes() == data                          # file is perfect
     assert "hash mismatch" in res.failed_sources[f"127.0.0.1:{evil.port}"]
-    assert res.chunks_by_source == {f"127.0.0.1:{evil.port}": 1,   # chunk 0 only
-                                    f"127.0.0.1:{good.port}": 5}   # chunks 1-5
+    assert res.chunks_by_source == {f"127.0.0.1:{good.port}": 6}   # every kept chunk is honest
 
 
 def test_evil_peer_alone_fails_cleanly(tmp_path, data, servers):

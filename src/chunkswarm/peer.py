@@ -101,18 +101,20 @@ class TrackerClient:
 
 class PeerNode:
     def __init__(self, tracker_url: str, share_dir: Path, download_dir: Path, *,
-                 host: str = "127.0.0.1", port: int = 0, name: str = "peer"):
+                 host: str = "127.0.0.1", port: int = 0, name: str = "peer", upload_limit: float = 0):
         self.tracker = TrackerClient(tracker_url)
         self.share_dir = Path(share_dir)
         self.download_dir = Path(download_dir)
         self.host, self.port, self.name = host, port, name
+        self.upload_limit = upload_limit
         self.server: PeerServer | None = None
         self._stop = threading.Event()
 
     def start(self) -> "PeerNode":
         """Start the file server, register, share our files, start heartbeats."""
         # TODO B
-        self.server = PeerServer(self.share_dir, self.host, self.port)
+        self.server = PeerServer(self.share_dir, self.host, self.port,
+                                 upload_limit=self.upload_limit)
         self.server.start()
         self.tracker.register(self.name, self.server.port)
         self.server.chunk_size = self.tracker.chunk_size
@@ -203,7 +205,7 @@ def repl(node: PeerNode) -> None:
                     if pct // 4 == shown[0] and done != total:
                         return  # redraw only when the bar actually grows
                     shown[0] = pct // 4
-                    print(f"\r  [{'#' * (pct // 4):<25}] {pct:3d}%  from {src}   ", end="", flush=True)
+                    print(f"\r  [{'#' * (pct // 4):<25}] {pct:3d}%  from {src:<21}   ", end="", flush=True)
 
                 res = node.get(file_id, progress=bar)
                 print(f"\n  saved {res.path}  ({_fmt_size(res.size)} in {res.seconds:.2f}s, "
@@ -212,6 +214,7 @@ def repl(node: PeerNode) -> None:
                     print(f"  resumed: {res.resumed_chunks} chunk(s) were already on disk")
                 if res.failed_sources:
                     print(f"  failed over from: {res.failed_sources}")
+                print(f"  chunks per peer: {res.chunks_by_source}")
             elif cmd == "share" and args:
                 m = node.share_file(Path(args[0]))
                 print(f"  sharing {m.name} ({m.file_id[:12]}…)")
@@ -235,12 +238,14 @@ def main() -> None:
                     help="interface for the file server; use your LAN IP for multi-machine runs")
     ap.add_argument("--port", type=int, default=0, help="0 = pick a free port")
     ap.add_argument("--name", default="peer")
+    ap.add_argument("--upload-limit", type=float, default=0,
+                    help="max upload speed in MB/s per connection (0 = no limit)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
     node = PeerNode(args.tracker, Path(args.share_dir), Path(args.download_dir),
-                    host=args.host, port=args.port, name=args.name).start()
+                    host=args.host, port=args.port, name=args.name, upload_limit=args.upload_limit * 1024 * 1024).start()
     print(f"peer '{node.name}' serving on {node.host}:{node.server.port}, "
           f"sharing {len(node.server.manifests())} file(s)")
     try:

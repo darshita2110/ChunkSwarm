@@ -20,8 +20,10 @@ YOUR TASK: fill in TODOs A, B, C. Run `pytest tests/test_downloader.py -v`.
 """
 
 from __future__ import annotations
+import queue
 import json
 import os
+import threading
 import hashlib
 import ipaddress
 import logging
@@ -181,12 +183,10 @@ ProgressFn = Callable[[int, int, str], None]   # (chunks_done, total_chunks, "ip
 # ====================================================================== the download
 def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, *,
              expected_file_id: str | None = None, connect_timeout: float = 5.0,
-             io_timeout: float = 15.0, progress: ProgressFn | None = None) -> DownloadResult:
-    """Download the file described by `manifest` from `sources`, verified."""
-    # TODO C
-## heart of the downloader
-
-    #the setup and safety checks
+             io_timeout: float = 15.0, progress: ProgressFn | None = None,
+             max_workers: int = 4) -> DownloadResult:
+    """Download the file described by `manifest` from several sources AT ONCE."""
+    # ---- setup and safety checks (same as before)
     if expected_file_id is not None and manifest.file_id != expected_file_id:
         raise IntegrityError("manifest does not describe the requested file")
     sources = list(dict.fromkeys(sources))
@@ -201,41 +201,43 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
     result = DownloadResult(path=part_path, size=manifest.size, seconds=0.0,
                             resumed_chunks=len(done))
     start = time.perf_counter()
-    conn = None
-    remaining = list(sources)
 
-    #the main loop
-    try:
-        mode = "r+b" if done else "wb"
-        with part_path.open(mode) as out:
-            if not done:
-                out.truncate(manifest.size)
-            for index in range(manifest.num_chunks):
-                if index in done:
-                    continue
-                while True:
-                    if conn is None:
-                        if not remaining:
-                            raise DownloadError(
-                                f"all sources failed at chunk {index}: {result.failed_sources}")
-                        src = remaining[0]
-                        try:
-                            conn = _PeerConn(src, connect_timeout, io_timeout)
-                        except OSError as e:
-                            result.failed_sources[f"{src.host}:{src.port}"] = f"connect: {e}"
-                            remaining.pop(0)
-                            continue
-                    label = f"{conn.source.host}:{conn.source.port}"
-                    try:
-                        data = conn.get_chunk(manifest, index)
-                    except (DownloadError, OSError) as e:
-                        log.warning("source %s failed on chunk %d: %s", label, index, e)
+    # ---- NEW: the shared to-do list
+    todo = queue.Queue()
+    for index in range(manifest.num_chunks):
+        if index not in done:
+            todo.put(index)
+    lock = threading.Lock()
+    stop = threading.Event()
+
+    def label_of(src):
+        return f"{src.host}:{src.port}"
+
+    # ---- NEW: one worker = one thread = one connection to one peer
+    def worker(src, out):
+        label = label_of(src)
+        try:
+            conn = _PeerConn(src, connect_timeout, io_timeout)
+        except OSError as e:
+            with lock:
+                result.failed_sources[label] = f"connect: {e}"
+            return
+        try:
+            while not stop.is_set():
+                try:
+                    index = todo.get_nowait()
+                except queue.Empty:
+                    return
+                try:
+                    data = conn.get_chunk(manifest, index)
+                except (DownloadError, OSError) as e:
+                    todo.put(index)
+                    log.warning("source %s failed on chunk %d: %s", label, index, e)
+                    with lock:
                         result.failed_sources[label] = str(e)
-                        conn.close()
-                        conn = None
-                        remaining.pop(0)
-                        continue
-                    offset, _ = manifest.chunk_span(index)
+                    return
+                offset, _ = manifest.chunk_span(index)
+                with lock:
                     out.seek(offset)
                     out.write(data)
                     done.add(index)
@@ -243,13 +245,34 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
                     result.chunks_by_source[label] = result.chunks_by_source.get(label, 0) + 1
                     if progress:
                         progress(len(done), manifest.num_chunks, label)
-                    break
-    # cleanup if anything goes wrong
-    finally:
-        if conn:
+        finally:
             conn.close()
 
-    #Final check and rename
+    # ---- NEW: run rounds of workers until every chunk is done
+    mode = "r+b" if done else "wb"
+    with part_path.open(mode) as out:
+        if not done:
+            out.truncate(manifest.size)
+        while not todo.empty():
+            healthy = [s for s in sources if label_of(s) not in result.failed_sources]
+            if not healthy:
+                raise DownloadError(f"all sources failed with {todo.qsize()} chunk(s) left: "
+                                    f"{result.failed_sources}")
+            threads = [threading.Thread(target=worker, args=(s, out), daemon=True)
+                       for s in healthy[:max_workers]]
+            for t in threads:
+                t.start()
+            try:
+                for t in threads:
+                    while t.is_alive():
+                        t.join(0.2)
+            except BaseException:
+                stop.set()
+                for t in threads:
+                    t.join()
+                raise
+
+    # ---- final check and rename (same as before)
     if sha256_file(part_path) != manifest.file_id:
         part_path.unlink(missing_ok=True)
         state_path.unlink(missing_ok=True)

@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import socket
 import threading
+import time
 from pathlib import Path
 
 from .manifest import DEFAULT_CHUNK_SIZE, Manifest, build_manifest, is_file_id
@@ -50,13 +51,14 @@ def _close_gracefully(conn: socket.socket) -> None:
 class PeerServer:
     def __init__(self, share_dir: Path, host: str = "127.0.0.1", port: int = 0, *,
                  chunk_size: int = DEFAULT_CHUNK_SIZE, max_connections: int = 32,
-                 idle_timeout: float = 30.0):
+                 idle_timeout: float = 30.0, upload_limit: float = 0):
         self.share_dir = Path(share_dir).resolve()   # full real path, e.g. D:\apps\...\shared
         self.share_dir.mkdir(parents=True, exist_ok=True)
         self.host = host
         self.port = port                 # 0 = "OS, pick any free port for me"
         self.chunk_size = chunk_size
         self.idle_timeout = idle_timeout
+        self.upload_limit = upload_limit
         # A counter of free "seats". acquire() takes one, release() gives it back.
         self._slots = threading.BoundedSemaphore(max_connections)
         # file_id -> (path on disk, manifest). Only files in here can be served.
@@ -216,6 +218,8 @@ class PeerServer:
                      {"file_id": manifest.file_id, "index": index, "size": len(data)}, data)
             self.stats["chunks_served"] += 1
             self.stats["bytes_served"] += len(data)
+            if self.upload_limit:
+                time.sleep(len(data) / self.upload_limit)
             return True
 
         self.stats["rejected"] += 1
