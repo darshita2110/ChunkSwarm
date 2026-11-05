@@ -136,7 +136,7 @@ def test_evil_peer_alone_fails_cleanly(tmp_path, data, servers):
     servers.append(evil)
     with pytest.raises(DownloadError):
         download(m, [src(evil)], tmp_path / "dl")
-    assert list((tmp_path / "dl").iterdir()) == []   # no broken file left behind
+    assert not (tmp_path / "dl" / "movie.bin").exists()   # no broken file under the real name
 
 
 def test_peer_dies_midway_and_download_continues(tmp_path, data, servers):

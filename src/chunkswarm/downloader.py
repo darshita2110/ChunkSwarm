@@ -20,7 +20,8 @@ YOUR TASK: fill in TODOs A, B, C. Run `pytest tests/test_downloader.py -v`.
 """
 
 from __future__ import annotations
-
+import json
+import os
 import hashlib
 import ipaddress
 import logging
@@ -81,7 +82,8 @@ class DownloadResult:
     seconds: float                               # how long it took
     chunks_by_source: dict[str, int] = field(default_factory=dict)   # "ip:port" -> chunks
     failed_sources: dict[str, str] = field(default_factory=dict)     # "ip:port" -> why
-
+    resumed_chunks: int = 0   
+                       # chunks kept from an earlier attempt
     @property
     def mb_per_s(self) -> float:
         return (self.size / 1e6) / self.seconds if self.seconds > 0 else float("inf")
@@ -136,6 +138,42 @@ def _unique_path(directory: Path, name: str) -> Path:
         n += 1
     return candidate
 
+def _state_path(download_dir: Path, file_id: str) -> Path:
+    return download_dir / f"{file_id}.state.json"
+
+
+def _save_state(state_path: Path, manifest: Manifest, done: set[int]) -> None:
+    """Remember which chunks are verified, safely even if we crash mid-write."""
+    data = {"file_id": manifest.file_id, "chunk_size": manifest.chunk_size,
+            "done": sorted(done)}
+    tmp = state_path.with_name(state_path.name + ".tmp")
+    tmp.write_text(json.dumps(data))
+    os.replace(tmp, state_path)
+
+
+def _load_state(part_path: Path, state_path: Path, manifest: Manifest) -> set[int]:
+    """Which chunks of an earlier attempt are still good? Empty set = start fresh."""
+    if not part_path.exists() or not state_path.exists():
+        return set()
+    try:
+        data = json.loads(state_path.read_text())
+    except (OSError, ValueError):
+        return set()
+    if (not isinstance(data, dict) or data.get("file_id") != manifest.file_id
+            or data.get("chunk_size") != manifest.chunk_size
+            or part_path.stat().st_size != manifest.size
+            or not isinstance(data.get("done"), list)):
+        return set()
+    done = set()
+    with part_path.open("rb") as f:
+        for index in data["done"]:
+            if type(index) is not int or not 0 <= index < manifest.num_chunks:
+                continue
+            offset, length = manifest.chunk_span(index)
+            f.seek(offset)
+            if hashlib.sha256(f.read(length)).hexdigest() == manifest.chunk_hashes[index]:
+                done.add(index)
+    return done
 
 ProgressFn = Callable[[int, int, str], None]   # (chunks_done, total_chunks, "ip:port")
 
@@ -158,16 +196,23 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
     download_dir = Path(download_dir)
     download_dir.mkdir(parents=True, exist_ok=True)
     part_path = download_dir / f"{manifest.file_id}.part"
-    result = DownloadResult(path=part_path, size=manifest.size, seconds=0.0)
+    state_path = _state_path(download_dir, manifest.file_id)
+    done = _load_state(part_path, state_path, manifest)
+    result = DownloadResult(path=part_path, size=manifest.size, seconds=0.0,
+                            resumed_chunks=len(done))
     start = time.perf_counter()
     conn = None
     remaining = list(sources)
 
     #the main loop
     try:
-        with part_path.open("wb") as out:
-            out.truncate(manifest.size)
+        mode = "r+b" if done else "wb"
+        with part_path.open(mode) as out:
+            if not done:
+                out.truncate(manifest.size)
             for index in range(manifest.num_chunks):
+                if index in done:
+                    continue
                 while True:
                     if conn is None:
                         if not remaining:
@@ -193,26 +238,26 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
                     offset, _ = manifest.chunk_span(index)
                     out.seek(offset)
                     out.write(data)
+                    done.add(index)
+                    _save_state(state_path, manifest, done)
                     result.chunks_by_source[label] = result.chunks_by_source.get(label, 0) + 1
                     if progress:
-                        progress(index + 1, manifest.num_chunks, label)
+                        progress(len(done), manifest.num_chunks, label)
                     break
     # cleanup if anything goes wrong
-    except BaseException:
+    finally:
         if conn:
             conn.close()
-        part_path.unlink(missing_ok=True)
-        raise
-    if conn:
-        conn.close()
 
     #Final check and rename
     if sha256_file(part_path) != manifest.file_id:
         part_path.unlink(missing_ok=True)
+        state_path.unlink(missing_ok=True)
         raise IntegrityError("final file hash does not match file_id")
 
     final_path = _unique_path(download_dir, safe_filename(manifest.name))
     part_path.replace(final_path)
+    state_path.unlink(missing_ok=True)
     result.path = final_path
     result.seconds = time.perf_counter() - start
     return result

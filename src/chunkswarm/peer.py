@@ -208,6 +208,8 @@ def repl(node: PeerNode) -> None:
                 res = node.get(file_id, progress=bar)
                 print(f"\n  saved {res.path}  ({_fmt_size(res.size)} in {res.seconds:.2f}s, "
                       f"{res.mb_per_s:.1f} MB/s)  SHA-256 verified")
+                if res.resumed_chunks:
+                    print(f"  resumed: {res.resumed_chunks} chunk(s) were already on disk")
                 if res.failed_sources:
                     print(f"  failed over from: {res.failed_sources}")
             elif cmd == "share" and args:
