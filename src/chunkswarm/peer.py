@@ -135,7 +135,7 @@ class PeerNode:
         self.tracker.share(m)
         return m
 
-    def get(self, file_id: str, progress=None) -> DownloadResult:
+    def get(self, file_id: str, progress=None, on_chunk=None) -> DownloadResult:
         """Download one file by its id: manifest + sources from the tracker, then download()."""
         # TODO C
         if not is_file_id(file_id):
@@ -143,7 +143,7 @@ class PeerNode:
         manifest = self.tracker.manifest(file_id)
         sources = self.tracker.sources(file_id)
         return download(manifest, sources, self.download_dir,
-                        expected_file_id=file_id, progress=progress)
+                        expected_file_id=file_id, progress=progress, on_chunk=on_chunk)
 
     def stop(self) -> None:
         self._stop.set()
@@ -240,6 +240,8 @@ def main() -> None:
     ap.add_argument("--name", default="peer")
     ap.add_argument("--upload-limit", type=float, default=0,
                     help="max upload speed in MB/s per connection (0 = no limit)")
+    ap.add_argument("--ui-port", type=int, default=0,
+                    help="also open a web dashboard on this port, e.g. 8080 (0 = no dashboard)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
@@ -248,6 +250,9 @@ def main() -> None:
                     host=args.host, port=args.port, name=args.name, upload_limit=args.upload_limit * 1024 * 1024).start()
     print(f"peer '{node.name}' serving on {node.host}:{node.server.port}, "
           f"sharing {len(node.server.manifests())} file(s)")
+    if args.ui_port:
+        from .dashboard import serve_dashboard
+        print(f"dashboard: {serve_dashboard(node, args.ui_port)}")
     try:
         repl(node)
     finally:

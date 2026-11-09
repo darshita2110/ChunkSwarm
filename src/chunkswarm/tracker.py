@@ -327,6 +327,7 @@ def main() -> None:
     ap.add_argument("--peer-ttl", type=float, default=30.0)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = create_app(args.db, peer_ttl=args.peer_ttl)
     # Flask's built-in server is fine for a LAN demo (not for production).
     app.run(host=args.host, port=args.port, threaded=True, debug=False)

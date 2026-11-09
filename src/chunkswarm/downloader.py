@@ -184,7 +184,8 @@ ProgressFn = Callable[[int, int, str], None]   # (chunks_done, total_chunks, "ip
 def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, *,
              expected_file_id: str | None = None, connect_timeout: float = 5.0,
              io_timeout: float = 15.0, progress: ProgressFn | None = None,
-             max_workers: int = 4) -> DownloadResult:
+             max_workers: int = 4,
+             on_chunk: Callable[[int, str], None] | None = None) -> DownloadResult:
     """Download the file described by `manifest` from several sources AT ONCE."""
     # ---- setup and safety checks (same as before)
     if expected_file_id is not None and manifest.file_id != expected_file_id:
@@ -200,6 +201,9 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
     done = _load_state(part_path, state_path, manifest)
     result = DownloadResult(path=part_path, size=manifest.size, seconds=0.0,
                             resumed_chunks=len(done))
+    if on_chunk:
+        for index in done:
+            on_chunk(index, "resumed")
     start = time.perf_counter()
 
     # ---- NEW: the shared to-do list
@@ -243,6 +247,8 @@ def download(manifest: Manifest, sources: Iterable[Source], download_dir: Path, 
                     done.add(index)
                     _save_state(state_path, manifest, done)
                     result.chunks_by_source[label] = result.chunks_by_source.get(label, 0) + 1
+                    if on_chunk:
+                        on_chunk(index, label)
                     if progress:
                         progress(len(done), manifest.num_chunks, label)
         finally:

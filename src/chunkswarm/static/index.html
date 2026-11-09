@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="cs-token" content="{{TOKEN}}">
+  <title>ChunkSwarm peer</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="brand">ChunkSwarm</p>
+      <h1 id="peer-name">Peer</h1>
+      <p class="sub" id="peer-sub">Connecting…</p>
+    </div>
+    <ul class="facts" id="facts" aria-live="polite"></ul>
+  </header>
+
+  <main>
+    <section class="search" aria-labelledby="search-h">
+      <h2 id="search-h">Find a file</h2>
+      <form id="search-form" autocomplete="off">
+        <label class="visually-hidden" for="q">File name</label>
+        <input id="q" name="q" type="search" placeholder="Search files shared by other peers">
+        <button type="submit">Search</button>
+      </form>
+      <p class="hint" id="search-msg">Leave it empty and search to list everything on the network.</p>
+      <ul class="results" id="results"></ul>
+    </section>
+
+    <section class="current" aria-labelledby="current-h">
+      <div class="current-head">
+        <div>
+          <h2 id="current-h">Download</h2>
+          <p class="file" id="cur-name">Nothing downloading yet</p>
+        </div>
+        <div class="numbers">
+          <p class="pct" id="cur-pct">0%</p>
+          <p class="speed" id="cur-speed"></p>
+        </div>
+      </div>
+      <div class="map" id="map" role="img" aria-label="No download yet"></div>
+      <p class="hint" id="cur-msg">Search for a file and choose Download. Each square is one chunk, coloured by the peer that sent it.</p>
+      <ul class="legend" id="legend"></ul>
+    </section>
+
+    <div class="lower">
+      <section aria-labelledby="hist-h">
+        <h2 id="hist-h">History</h2>
+        <table>
+          <thead><tr><th>File</th><th>Result</th><th class="num">Time</th><th class="num">Speed</th><th class="num">Peers</th></tr></thead>
+          <tbody id="history"></tbody>
+        </table>
+        <p class="hint" id="hist-empty">Finished downloads appear here.</p>
+      </section>
+
+      <section aria-labelledby="files-h">
+        <div class="row-head">
+          <h2 id="files-h">You share</h2>
+          <button class="quiet" id="rescan" type="button">Rescan folder</button>
+        </div>
+        <ul class="files" id="files"></ul>
+        <p class="hint" id="files-empty">Put files in your share folder, then choose Rescan folder.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

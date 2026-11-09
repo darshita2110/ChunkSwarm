@@ -20,6 +20,8 @@ chunkswarm-peer = "chunkswarm.peer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+[tool.setuptools.package-data]
+chunkswarm = ["static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
