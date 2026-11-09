@@ -70,14 +70,15 @@ def test_three_sources_all_help(tmp_path, data, make):
     assert all(res.chunks_by_source.get(label(p), 0) >= 1 for p, _ in peers)
     assert sum(res.chunks_by_source.values()) == 24
 
-
 def test_three_sources_are_faster_than_one(tmp_path, data, make):
+    # Timing on shared CI machines is noisy (one run can stall for a second),
+    # so compare the BEST of 3 attempts, the usual way to benchmark in tests.
     peers = [make(n, data) for n in "abc"]
     m = peers[0][1]
-    one = download(m, [src(peers[0][0])], tmp_path / "dl1")
-    three = download(m, [src(p) for p, _ in peers], tmp_path / "dl3")
-    assert three.seconds < one.seconds * 0.6, (one.seconds, three.seconds)
-
+    one = min(download(m, [src(peers[0][0])], tmp_path / f"dl1_{i}").seconds for i in range(3))
+    three = min(download(m, [src(p) for p, _ in peers], tmp_path / f"dl3_{i}").seconds
+                for i in range(3))
+    assert three < one * 0.6, (one, three)
 
 def test_max_workers_1_uses_one_peer_at_a_time(tmp_path, data, make):
     peers = [make(n, data) for n in "ab"]

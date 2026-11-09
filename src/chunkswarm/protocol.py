@@ -1,4 +1,4 @@
-"""ChunkSwarm wire protocol: how two peers send whole messages over TCP.
+r"""ChunkSwarm wire protocol: how two peers send whole messages over TCP.
 
 Why this file exists
 --------------------
