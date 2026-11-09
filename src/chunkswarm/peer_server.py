@@ -214,12 +214,12 @@ class PeerServer:
             except OSError:
                 send_error(conn, "UNAVAILABLE", "chunk could not be read")
                 return True
+            if self.upload_limit:
+                time.sleep(len(data) / self.upload_limit)
             send_msg(conn, MsgType.CHUNK_DATA,
                      {"file_id": manifest.file_id, "index": index, "size": len(data)}, data)
             self.stats["chunks_served"] += 1
             self.stats["bytes_served"] += len(data)
-            if self.upload_limit:
-                time.sleep(len(data) / self.upload_limit)
             return True
 
         self.stats["rejected"] += 1

@@ -13,6 +13,7 @@ dependencies = ["flask>=3.0", "requests>=2.31"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+bench = ["matplotlib>=3.7"]
 
 [project.scripts]
 chunkswarm-tracker = "chunkswarm.tracker:main"
