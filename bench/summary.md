@@ -4,7 +4,7 @@
 - Date: 2026-11-09 16:19
 - Runs per configuration: 3 (median shown, min-max in brackets)
 - All transfers over real TCP on 127.0.0.1, every chunk SHA-256 verified
-
+ 
 ## Parallel peers (each limited to 5 MB/s)
 
 | Peers | MB/s | Seconds |

@@ -122,7 +122,7 @@ def test_evil_peer_caught_and_chunk_fetched_from_honest_peer(tmp_path, data, ser
     evil, m = make_server(tmp_path, "evil", data, CorruptingServer)
     good, _ = make_server(tmp_path, "good", data)
     servers += [evil, good]
-    res = download(m, [src(evil), src(good)], tmp_path / "dl")
+    res = download(m, [src(evil), src(good)], tmp_path / "dl", max_workers=1)
     assert res.path.read_bytes() == data                          # file is perfect
     assert "hash mismatch" in res.failed_sources[f"127.0.0.1:{evil.port}"]
     assert res.chunks_by_source == {f"127.0.0.1:{good.port}": 6}   # every kept chunk is honest
@@ -140,7 +140,7 @@ def test_peer_dies_midway_and_download_continues(tmp_path, data, servers):
     dying, m = make_server(tmp_path, "dying", data, DyingServer)
     good, _ = make_server(tmp_path, "good", data)
     servers += [dying, good]
-    res = download(m, [src(dying), src(good)], tmp_path / "dl", io_timeout=3)
+    res = download(m, [src(dying), src(good)], tmp_path / "dl", io_timeout=3, max_workers=1)
     assert res.path.read_bytes() == data
     assert res.chunks_by_source[f"127.0.0.1:{dying.port}"] == 2
 
@@ -151,7 +151,7 @@ def test_offline_peer_skipped(tmp_path, data, servers):
     with socket.socket() as s:            # find a port nobody listens on
         s.bind(("127.0.0.1", 0))
         dead_port = s.getsockname()[1]
-    res = download(m, [Source("127.0.0.1", dead_port), src(srv)], tmp_path / "dl")
+    res = download(m, [Source("127.0.0.1", dead_port), src(srv)], tmp_path / "dl", max_workers=1)
     assert res.path.read_bytes() == data
     assert f"127.0.0.1:{dead_port}" in res.failed_sources
 
