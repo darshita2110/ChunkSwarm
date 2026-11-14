@@ -16,3 +16,4 @@ shared_files/
 playground/shared
 shared_*/
 dl_*/
+*.pcapng
